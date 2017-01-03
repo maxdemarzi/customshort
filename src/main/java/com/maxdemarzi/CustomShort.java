@@ -2,6 +2,7 @@ package com.maxdemarzi;
 
 import org.codehaus.jackson.map.ObjectMapper;
 import org.neo4j.graphdb.*;
+import org.neo4j.graphdb.traversal.InitialBranchState;
 import org.neo4j.graphdb.traversal.TraversalDescription;
 import org.neo4j.graphdb.traversal.Uniqueness;
 
@@ -29,29 +30,27 @@ public class CustomShort {
             Node starting = db.getNodeById(Long.parseLong((String) input.get("from")));
             Node ending = db.getNodeById(Long.parseLong((String) input.get("to")));
             ArrayList<String> rels = (ArrayList<String>) input.get("types");
-            ArrayList<RelationshipType> relTypes = new ArrayList<>();
+            HashSet<RelationshipType> relTypes = new HashSet<>();
             for (String rel : rels) {
                 relTypes.add(RelationshipType.withName(rel));
             }
 
-            PathExpander pathExpander = PathExpanderBuilder.allTypesAndDirections().build();
+            InitialBranchState.State<Boolean> ibs = new InitialBranchState.State<>(false, false);
+
+
+            PathExpander pathExpander = new CustomExpander(relTypes);
             FoundNodeEvaluator evaluator = new FoundNodeEvaluator(ending);
             TraversalDescription td = db.traversalDescription()
                     .breadthFirst()
-                    .expand(pathExpander)
+                    .expand(pathExpander, ibs)
                     .evaluator(evaluator)
                     .uniqueness(Uniqueness.RELATIONSHIP_PATH);
 
-            outerloop:
             for ( org.neo4j.graphdb.Path path : td.traverse(starting)) {
-                for (Relationship rel : path.relationships()) {
-                    if (relTypes.contains(rel.getType())) {
-                        for (Node node : path.nodes()) {
-                            results.add((String) node.getProperty("name"));
-                        }
-                        break outerloop;
-                    }
+                for (Node node : path.nodes()) {
+                    results.add((String) node.getProperty("name"));
                 }
+                break;
             }
         }
         return Response.ok().entity(objectMapper.writeValueAsString(results)).build();
